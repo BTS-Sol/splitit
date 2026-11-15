@@ -67,7 +67,7 @@ export class FakeEtherpad {
   }
 
   pad(id) {
-    if (!this.pads.has(id)) this.pads.set(id, { text: this.defaultText, rev: 0 });
+    if (!this.pads.has(id)) this.pads.set(id, { text: this.defaultText, rev: 0, time: Date.now() });
     return this.pads.get(id);
   }
 
@@ -105,7 +105,8 @@ export class FakeEtherpad {
         data: {
           userId: socket.author,
           readonly: false,
-          collab_client_vars: { initialAttributedText: { text: pad.text, attribs: '' }, rev: pad.rev },
+          serverTimestamp: Date.now(),
+          collab_client_vars: { initialAttributedText: { text: pad.text, attribs: '' }, rev: pad.rev, time: pad.time },
         },
       });
     } else if (msg.type === 'COLLABROOM' && msg.data.type === 'USER_CHANGES') {
@@ -119,6 +120,7 @@ export class FakeEtherpad {
         return;
       }
       pad.rev++;
+      pad.time = Date.now();
       socket._emit({ type: 'COLLABROOM', data: { type: 'ACCEPT_COMMIT', newRev: pad.rev } });
       for (const other of this.sockets) {
         if (other !== socket && other.padId === socket.padId) {

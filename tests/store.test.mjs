@@ -146,3 +146,96 @@ test('lines written by humans are ignored', async () => {
   assert.equal(b.state.members.size, 1);
   b.close();
 });
+
+// ---------------------------------------------------------------- pad chain
+
+const expense = (i, paidBy) => ({
+  type: 'expense',
+  eid: `e${i}`,
+  kind: 'expense',
+  title: `Ausgabe Nummer ${i} mit etwas längerem Titel`,
+  amount: 1000 + i,
+  paidBy,
+  date: '2026-11-15',
+  split: 'equal',
+  shares: { [paidBy]: 1 },
+});
+
+const chained = (srv, storage) => ({ ...browser(srv, storage), padMaxChars: 3000 });
+const padsOf = (srv, padId) => [...srv.pads.keys()].filter((k) => k === padId || k.startsWith(`${padId}-`));
+
+test('a full pad continues in "<pad>-2", "<pad>-3", …', async () => {
+  const srv = new FakeEtherpad();
+  const storage = memoryStorage();
+  const a = await createTrip({ name: 'Lange Reise', currency: 'EUR', names: ['Anna', 'Ben'] }, chained(srv, storage));
+  a.connect();
+  for (let i = 0; i < 40; i++) a.dispatch(expense(i, a.me));
+  await until(() => a.sync.loaded && a.sync.pending === 0, 5000);
+
+  const ids = padsOf(srv, a.padId);
+  assert.ok(ids.length >= 4, `expected several pads, got ${ids.length}`);
+  assert.deepEqual(ids, [a.padId, ...ids.slice(1).map((_, i) => `${a.padId}-${i + 2}`)]);
+  ids.forEach((id, i) => {
+    const { text } = srv.pad(id);
+    assert.ok(text.startsWith(i ? 'SplitIt – verschlüsselte Daten einer Reise, Teil' : PAD_HEADER));
+    assert.ok(text.length <= 3000 + 200, `pad ${i + 1} has ${text.length} chars`);
+    const last = i === ids.length - 1;
+    assert.equal(text.includes(`SplitIt-Fortsetzung: https://edupad.ch/p/${a.padId}-${i + 2}`), !last);
+  });
+  assert.equal(a.state.expenses.size, 40);
+  a.close();
+
+  // A new browser walks along the chain.
+  const b = await TripStore.open(a.tripId, chained(srv));
+  b.connect();
+  await until(() => b.sync.loaded, 5000);
+  assert.equal(b.state.expenses.size, 40);
+  assert.equal(b.sync.pads, ids.length);
+  // … and writes into the last pad.
+  b.setMe(a.storage.get(`me:${a.tripId}`) || [...b.state.members.keys()][0]);
+  b.dispatch(expense(99, b.me));
+  await until(() => b.sync.pending === 0);
+  assert.ok(srv.pad(ids.at(-1)).text.split('\n').length > 3 || padsOf(srv, a.padId).length > ids.length);
+  b.close();
+
+  // The first browser starts from its cache and sees the new entry.
+  const again = await TripStore.open(a.tripId, chained(srv, storage));
+  assert.equal(again.parts.length, ids.length, 'all pads known from the cache');
+  again.connect();
+  await until(() => again.sync.loaded && again.state.expenses.has('e99'), 5000);
+  again.close();
+});
+
+test('a deleted part of the chain is restored, old parts are kept alive', async () => {
+  const srv = new FakeEtherpad();
+  const storage = memoryStorage();
+  const a = await createTrip({ name: 'Lange Reise', currency: 'EUR', names: ['Anna'] }, chained(srv, storage));
+  a.connect();
+  for (let i = 0; i < 25; i++) a.dispatch(expense(i, a.me));
+  await until(() => a.sync.loaded && a.sync.pending === 0, 5000);
+  a.close();
+  const ids = padsOf(srv, a.padId);
+  assert.ok(ids.length >= 3);
+  const firstText = srv.pad(ids[0]).text;
+
+  // edupad deleted the first (full) pad, and the second one is 100 days old.
+  srv.deletePad(ids[0]);
+  srv.pad(ids[1]).time = Date.now() - 100 * 864e5;
+  const revBefore = srv.pad(ids[1]).rev;
+
+  const again = await TripStore.open(a.tripId, chained(srv, storage));
+  again.connect();
+  await until(() => again.sync.loaded && again.sync.pending === 0 && srv.pad(ids[1]).rev > revBefore, 5000);
+  assert.ok(again.restoredFromCache > 0);
+  const restored = srv.pad(ids[0]).text;
+  assert.equal(eventLines(restored).length, eventLines(firstText).length);
+  assert.ok(restored.includes(`SplitIt-Fortsetzung: https://edupad.ch/p/${a.padId}-2`));
+  assert.ok(srv.pad(ids[1]).text.trimEnd().endsWith(`${a.padId}-3`), 'keep-alive line appended');
+  again.close();
+
+  const fresh = await TripStore.open(a.tripId, chained(srv));
+  fresh.connect();
+  await until(() => fresh.sync.loaded, 5000);
+  assert.equal(fresh.state.expenses.size, 25);
+  fresh.close();
+});

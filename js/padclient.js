@@ -305,6 +305,8 @@ export class PadClient {
       this.text = cv.initialAttributedText.text;
       this.rev = cv.rev;
       this.userId = msg.data.userId;
+      this.lastEdit = cv.time || null; // time of the latest revision
+      this.serverTime = msg.data.serverTimestamp || null;
       this.readonly = !!msg.data.readonly;
       this.ready = true;
       this.connectedAt = Date.now();

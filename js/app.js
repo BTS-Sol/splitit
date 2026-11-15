@@ -857,7 +857,9 @@ function viewGroup(store) {
     </section>
     <section class="card">
       <h2>Daten &amp; Backup</h2>
-      <p class="small">Gespeichert auf edupad.ch, verschlüsselt mit einem Schlüssel aus dem Link.
+      <p class="small">Gespeichert auf edupad.ch${
+        store.sync.pads > 1 ? ` in ${store.sync.pads} Pads (ein volles Pad verweist auf das nächste)` : ''
+      }, verschlüsselt mit einem Schlüssel aus dem Link.
         edupad löscht Pads, die ${PAD_RETENTION_DAYS} Tage nicht bearbeitet wurden${
           deletion ? ` – bei dieser Reise frühestens am <strong>${fmtDate(deletion)}</strong>` : ''
         }. Jeder Browser, der die Reise geöffnet hat, behält eine Kopie und stellt sie dann automatisch wieder her.</p>
@@ -1188,11 +1190,11 @@ $app.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('hashchange', onRoute);
-window.addEventListener('online', () => current?.store.client?.reconnectNow());
+window.addEventListener('online', () => current?.store.reconnectNow());
 // Don't wait for the ping timeout to notice that the network is gone.
-window.addEventListener('offline', () => current?.store.client?.ws?.close());
+window.addEventListener('offline', () => current?.store.dropConnections());
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') current?.store.client?.reconnectNow();
+  if (document.visibilityState === 'visible') current?.store.reconnectNow();
 });
 
 // Support ?t=<id> links as well.

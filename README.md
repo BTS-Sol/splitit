@@ -81,13 +81,33 @@ Der Zustand entsteht, indem alle Zeilen der Reihe nach angewendet werden; bei de
 der spätere Eintrag. Weil nur angehängt wird, führt Etherpad gleichzeitige Änderungen mehrerer Personen
 ohne Konflikt zusammen. Unbekannte oder kaputte Zeilen werden ignoriert.
 
+**Pad-Kette**: Würde ein Pad mit dem nächsten Eintrag größer als 500 kB (`PAD_MAX_CHARS` in
+`js/config.js`, etwa 1500 Einträge), bekommt es als letzte Zeile einen Verweis, und die Reise geht im
+nächsten Pad weiter:
+
+```
+SplitIt-Fortsetzung: https://edupad.ch/p/splitit-…-2      (letzte Zeile von Pad 1)
+```
+
+Die weiteren Pads heißen `…-2`, `…-3` usw. Ein neuer Browser folgt den Verweisen, ein bekannter Browser
+öffnet alle Teile gleichzeitig. Geschrieben wird immer ins letzte Pad, und alle Teile bleiben live
+verbunden. Damit volle Pads nicht nach 183 Tagen gelöscht werden, während die Reise im nächsten Pad
+weiterläuft, hängt der erste Besucher, der ein volles Pad sieht, das älter als 60 Tage ist, dort den
+Verweis noch einmal an.
+
+Etherpad selbst hat keine Längenbegrenzung. Auf edupad wurde ein Test-Pad bis 2 MB (≈ 6000 Einträge)
+ohne Fehler beschrieben, die Ladezeit stieg dabei nur von 1,8 auf 2,5 Sekunden. Die 500-kB-Grenze ist
+also eine Vorsichtsmaßnahme, zum Beispiel für Limits der Datenbank hinter edupad, die man von außen
+nicht sieht.
+
 **Im Browser** (localStorage, pro Reise): gewählte Person, eine Kopie aller Einträge (für den sofortigen
 Start und für die Wiederherstellung) sowie die Warteschlange noch nicht hochgeladener Änderungen.
 
 ## Grenzen und Hinweise
 
 - **edupad löscht Pads nach 183 Tagen ohne Bearbeitung.** Öffnet danach jemand die Reise, dessen Browser
-  sie kennt, lädt SplitIt die lokale Kopie automatisch wieder hoch, und der Link bleibt gleich.
+  sie kennt, lädt SplitIt die lokale Kopie automatisch wieder hoch, und zwar in jedes Pad der Kette
+  einzeln. Der Link bleibt gleich.
   Zusätzlich gibt es unter *Gruppe → Daten & Backup* ein JSON-Backup zum Einspielen.
 - **Wer den Link hat, kann alles sehen und ändern.** Es gibt keine Konten, und die Personenauswahl
   beruht auf Vertrauen. Deshalb nur Vornamen verwenden und den Link nur in der Gruppe teilen.
