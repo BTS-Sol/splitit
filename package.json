@@ -1,0 +1,10 @@
+{
+  "name": "splitit",
+  "private": true,
+  "description": "Reisekosten in der Gruppe teilen – statische Website, Daten auf edupad.ch",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "start": "python3 -m http.server 8080"
+  }
+}
